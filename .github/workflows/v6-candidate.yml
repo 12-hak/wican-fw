@@ -1,0 +1,36 @@
+name: Build V6 stability candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/v6-boot-stability]
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:release-v6.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          . "$IDF_PATH/export.sh"
+          idf.py build
+          git rev-parse HEAD > build/source-revisions.txt
+          cat meatpi-components.rev >> build/source-revisions.txt
+          git -C components/meatpi rev-parse HEAD >> build/source-revisions.txt
+          sha256sum build/wican-fw_obd_pro.bin > build/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wican-pro-v6-stability-candidate
+          path: |
+            build/wican-fw_obd_pro.bin
+            build/wican-fw_obd_pro.elf
+            build/wican-fw_obd_pro.map
+            build/source-revisions.txt
+            build/SHA256SUMS
+          if-no-files-found: error

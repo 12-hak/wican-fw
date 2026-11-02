@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Firmware and shared components form one tested source snapshot.
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/meatpi-components.rev" MEATPI_COMPONENTS_REV LIMIT_COUNT 1)
+find_package(Git REQUIRED)
+
 # Components live in the meatpi-components repo
 # (github.com/meatpiHQ/meatpi-components). Clone it next to this
 # checkout, or point the MEATPI_COMPONENTS_PATH environment variable at
@@ -43,6 +47,11 @@ else()
             COMMAND ${CMAKE_COMMAND} -E env GIT_TERMINAL_PROMPT=0
                     git clone "${_meatpi_url}" "${_meatpi_dest}"
             RESULT_VARIABLE _meatpi_clone_rc)
+        if(_meatpi_clone_rc EQUAL 0)
+            execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_meatpi_dest}"
+                            checkout --detach "${MEATPI_COMPONENTS_REV}"
+                            RESULT_VARIABLE _meatpi_clone_rc)
+        endif()
         if(_meatpi_clone_rc EQUAL 0 AND EXISTS "${_meatpi_dest}/components")
             set(MEATPI_COMPONENTS_PATH "${_meatpi_dest}/components")
         else()
@@ -54,7 +63,22 @@ else()
         endif()
     endif()
 endif()
-message(STATUS "MeatPi components: ${MEATPI_COMPONENTS_PATH}")
+get_filename_component(_meatpi_repo "${MEATPI_COMPONENTS_PATH}/.." ABSOLUTE)
+execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_meatpi_repo}" rev-parse HEAD
+                OUTPUT_VARIABLE _meatpi_actual OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _meatpi_rev_rc)
+if(NOT _meatpi_rev_rc EQUAL 0 OR NOT _meatpi_actual STREQUAL MEATPI_COMPONENTS_REV)
+    message(FATAL_ERROR "Component revision mismatch: expected ${MEATPI_COMPONENTS_REV}, "
+                        "got ${_meatpi_actual} at ${_meatpi_repo}. Use a clean checkout "
+                        "of the pinned revision; do not mix beta component versions.")
+endif()
+execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_meatpi_repo}" status --porcelain --untracked-files=no
+                OUTPUT_VARIABLE _meatpi_dirty OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _meatpi_status_rc)
+if(NOT _meatpi_status_rc EQUAL 0 OR NOT _meatpi_dirty STREQUAL "")
+    message(FATAL_ERROR "Pinned component checkout has tracked modifications: ${_meatpi_repo}")
+endif()
+message(STATUS "MeatPi components: ${MEATPI_COMPONENTS_PATH} (${_meatpi_actual})")
 list(APPEND EXTRA_COMPONENT_DIRS "${MEATPI_COMPONENTS_PATH}")
 
 # Sibling component packs: any meatpi-components-<suffix> repo cloned

@@ -78,11 +78,9 @@ $env:PATH = "$idfVenv\Scripts;" +
             'C:\Espressif\tools\ccache\4.12.1\ccache-4.12.1-windows-x86_64;' +
             'C:\Espressif\tools\idf-git\2.34.2\cmd;' + $env:PATH
 
-# ---- the live components tree (REQUIRED) ----------------------------------
-$env:MEATPI_COMPONENTS_PATH = 'C:\Users\Ali\Desktop\Projects\project_wican\wican-fw-dev\components\meatpi-components\components'
-if (-not (Test-Path (Join-Path $env:MEATPI_COMPONENTS_PATH 'espnetlink_link'))) {
-    Write-Error "MEATPI_COMPONENTS_PATH looks wrong: $env:MEATPI_COMPONENTS_PATH (no espnetlink_link in it)"
-}
+# CMake resolves the component tree and checks meatpi-components.rev.
+# Respect an explicit MEATPI_COMPONENTS_PATH; never replace it with a
+# developer-specific absolute path.
 
 Set-Location $PSScriptRoot
 
