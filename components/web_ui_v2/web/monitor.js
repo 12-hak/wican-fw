@@ -190,7 +190,7 @@ function buildDualBusTest(){
   const encoder=new TextEncoder(),decoder=new TextDecoder();
   const url=path=>((typeof API!=="undefined"&&API)?API.replace(/^http/,"ws"):location.origin.replace(/^http/,"ws"))+path;
   const cards=[];
-  const css=h("style",{},`.dual-bus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;overflow:auto;height:100%;align-content:start}.dual-bus-card{border:1px solid var(--pbd2);border-radius:8px;padding:16px;min-width:0;background:var(--pcard)}.dual-bus-card h3{margin:0 0 6px}.dual-bus-card .db-status{min-height:42px;margin:12px 0;overflow-wrap:anywhere}.dual-bus-card table{width:100%;border-collapse:collapse;font:12px var(--mono)}.dual-bus-card th,.dual-bus-card td{padding:7px 5px;text-align:left;border-bottom:1px solid var(--pbd2)}.dual-bus-card .db-scroll{overflow:auto;max-height:340px}.dual-bus-card pre{white-space:pre-wrap;max-height:120px;overflow:auto;font-size:11px}.dual-bus-note{grid-column:1/-1;font-size:12px;color:var(--pdim)}@media(max-width:760px){.dual-bus-grid{grid-template-columns:1fr}}`);
+  const css=h("style",{},`.dual-bus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;overflow:auto;height:100%;align-content:start}.dual-bus-card{border:1px solid var(--pbd2);border-radius:8px;padding:16px;min-width:0;background:var(--pcard)}.dual-bus-card h3{margin:0 0 6px}.dual-bus-card button:disabled{opacity:.45;cursor:default}.dual-bus-card .db-status{min-height:42px;margin:12px 0;overflow-wrap:anywhere}.dual-bus-card table{width:100%;border-collapse:collapse;font:12px var(--mono)}.dual-bus-card th,.dual-bus-card td{padding:7px 5px;text-align:left;border-bottom:1px solid var(--pbd2)}.dual-bus-card .db-scroll{overflow:auto;max-height:340px}.dual-bus-card pre{white-space:pre-wrap;max-height:120px;overflow:auto;font-size:11px}.dual-bus-note{grid-column:1/-1;font-size:12px;color:var(--pdim)}@media(max-width:760px){.dual-bus-grid{grid-template-columns:1fr}}`);
   const root=h("div",{class:"pmv dual-bus-grid"},css);
   function parseNative(line){
     const m=/^([tTrR])([0-9a-fA-F]+)$/.exec(line);if(!m)return null;
@@ -337,6 +337,8 @@ PAGES.__monitor=async(view,sub)=>{
   const statusBar=h("div",{class:"pm-status"},h("span",{},sbDot,sbConn),sbBus,h("span",{},"load",h("span",{class:"pm-load"},sbLoadBar),sbLoad),sbRx,sbFrames,sbErr,sbTec);
   app.append(body,statusBar);
   function paintStatus(){
+    const dual=curTab()==="dual";
+    connBtn.style.display=dual?"none":"";connChip.style.display=dual?"none":"";statusBar.style.display=dual?"none":"";
     const c=S.can,on=S.connected;
     sbDot.classList.toggle("on",on);sbConn.textContent=on?(S.paused?"paused":"connected"):"offline";
     sbBus.textContent=c&&c.enabled?"CAN "+canRate(c)+canNote(c):"CAN off";
