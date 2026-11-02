@@ -39,3 +39,18 @@ and testing/release.md. The upstream recorded results are upstream evidence,
 not tests performed on this fork or this user's device.
 
 No stable firmware has been published or flashed by this change.
+
+## Validation performed on this fork
+
+2026-11-02: GitHub build 41423988796 completed successfully from firmware
+commit 56cab34 and pinned shared components 2a8dbea8662fc2e018324e5cb62546256ada330e.
+Firmware image: 4,066,640 bytes; ELF and linker map retained with the artifact.
+Five upstream lwip_guard host tests passed on local WSL GCC with Unity 2.6.1.
+CMake configuration accepted the matching components and rejected a wrong SHA.
+Four dual-capture host tests passed, including two concurrent mock TCP streams.
+The later tools/dualcan files do not change the compiled firmware source.
+No physical device is connected, so no WiCAN or vehicle test has been performed.
+
+The dual-bus capture procedure is in tools/dualcan/README.md. It uses the
+firmware's existing native-CAN and OBD-chip interfaces rather than adding
+an always-running task. TSR message identities are still unknown.
