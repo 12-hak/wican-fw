@@ -8,7 +8,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function scenario({reject='',autopid=false}={}){
  const dom=new JSDOM('<!doctype html><body></body>',{url:'http://wican/',runScripts:'outside-only'}),w=dom.window;
  w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.API='';
- w.api=async p=>p.includes('settings/autopid')?{enabled:autopid}:p.includes('obd_chip')?{ready:true}:{running:true,silent:true,baud_kbps:500};
+ w.api=async p=>p.includes('settings/autopid')?{enabled:autopid}:p.includes('obd_chip')?{ready:true}:p==='/api/autopid'?{stats:{running:false}}:{running:true,silent:true,baud_kbps:500};
  w.eval(`function h(tag,attrs,...kids){const e=document.createElement(tag);for(const [k,v]of Object.entries(attrs||{})){if(v==null||v===false)continue;if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v);}for(const c of kids.flat(9)){if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));}return e;}`);
  const sockets=[];
  class WS{

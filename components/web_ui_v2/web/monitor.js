@@ -250,9 +250,9 @@ function buildDualBusTest(){
       if(s.busy||s.ws)return;s.busy=true;const token=++s.token;buttons();note("Checking interface…");
       try{
         if(chip){
-          const [info,apid]=await Promise.all([api("/api/obd_chip"),api("/api/settings/autopid")]);
+          const [info,apid,run]=await Promise.all([api("/api/obd_chip"),api("/api/settings/autopid"),api("/api/autopid")]);
           if(token!==s.token||!alive)return;
-          if(apid.enabled!==false)throw new Error("Disable AutoPID in Settings and apply/restart before this test");
+          if(apid.enabled!==false||apid.pending_reboot||!run.stats||run.stats.running!==false)throw new Error("Disable AutoPID in Settings and apply/restart before this test");
           if(!info.ready)throw new Error("OBD chip is not ready; inspect System diagnostics");
         }else{
           const info=await api("/api/can");if(token!==s.token||!alive)return;
