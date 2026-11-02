@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from gvret import GvretServer
 
 
 def slcan(line):
@@ -86,7 +87,9 @@ def capture(args):
     errors = []
     counts = {'HS-CAN1_6-14': 0, 'HS-CAN2_3-11': 0}
     start = time.monotonic_ns()
-    with socket.create_connection((args.host, args.native_port), timeout=5) as ns, \
+    with GvretServer(getattr(args, "gvret_port", None), start,
+                     getattr(args, "wait_for_savvycan", 120)) as gvret, \
+         socket.create_connection((args.host, args.native_port), timeout=5) as ns, \
          socket.create_connection((args.host, args.obd_port), timeout=5) as osock, \
          (args.output / 'frames.csv').open('w', newline='') as output:
         ns.settimeout(1)
@@ -123,7 +126,9 @@ def capture(args):
                                 frame = parser(text)
                                 if frame is not None:
                                     with lock:
-                                        writer.writerow([(time.monotonic_ns()-start)//1000, bus, *frame])
+                                        timestamp = (time.monotonic_ns()-start)//1000
+                                        writer.writerow([timestamp, bus, *frame])
+                                        gvret.publish(timestamp, 0 if bus == "HS-CAN1_6-14" else 1, frame)
                                         counts[bus] += 1
                                 elif bus == 'HS-CAN2_3-11' and text and text != 'ATMA':
                                     raise RuntimeError(f'OBD monitor stopped or unexpected output: {text!r}')
@@ -151,7 +156,7 @@ def capture(args):
                 osock.sendall(b' ')
             except OSError:
                 pass
-    summary = {'counts': counts, 'errors': errors,
+    summary = {'counts': counts, 'errors': errors, 'gvret': gvret.stats,
                'timestamp': 'PC receive monotonic microseconds, not synchronized bus-edge timestamps',
                'native_before': native}
     try:
@@ -169,9 +174,15 @@ if __name__ == '__main__':
     p.add_argument('host', help='WiCAN IPv4 address or hostname')
     p.add_argument('--native-port', type=int, default=3333)
     p.add_argument('--obd-port', type=int, default=35000)
+    p.add_argument('--gvret-port', type=int, help='Serve combined GVRET on localhost, 23 for standard SavvyCAN')
+    p.add_argument('--wait-for-savvycan', type=float, default=120, help='Wait for client before capture; 0 disables wait')
     p.add_argument('--seconds', type=float, default=60)
     p.add_argument('--output', type=Path, required=True, help='New directory for this capture')
     args = p.parse_args()
+    if args.gvret_port is not None and not 1 <= args.gvret_port <= 65535:
+        p.error("--gvret-port must be 1..65535")
+    if args.wait_for_savvycan < 0:
+        p.error("--wait-for-savvycan must be nonnegative")
     if args.seconds <= 0:
         p.error('--seconds must be positive')
     capture(args)

@@ -68,8 +68,9 @@ class CaptureTests(unittest.TestCase):
                     obd_port=listeners[1].getsockname()[1], output=Path(folder)/'capture', seconds=0.2)
                 def status(host, path):
                     return {'running': True, 'silent': True, 'baud_kbps': 500} if path == '/api/can' else {'stats': {'running': False}}
-                with patch.object(c, 'status', status):
+                with patch.object(c, 'status', status), patch.object(c.GvretServer, 'publish') as published:
                     c.capture(args)
+                self.assertEqual(sorted(call.args[1] for call in published.call_args_list), [0, 0, 1, 1])
                 text = (args.output/'frames.csv').read_text()
                 self.assertEqual(len(text.splitlines()), 5)
                 self.assertIn('HS-CAN1_6-14,123,2,0102', text)
