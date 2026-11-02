@@ -54,3 +54,11 @@ No physical device is connected, so no WiCAN or vehicle test has been performed.
 The dual-bus capture procedure is in tools/dualcan/README.md. It uses the
 firmware's existing native-CAN and OBD-chip interfaces rather than adding
 an always-running task. TSR message identities are still unknown.
+
+## On-device dual monitor test build
+
+Version 6.0.0-beta.7-dualbus.1 builds from firmware 1e3364693415c9fe0531539ab073ff6e05cc1005.
+Build 41428541495 passed; downloaded BIN SHA256 af110f2035f835ed1c4d5b5a7789181246e9ca083c07d885b939945ab814e0b2.
+The new navigation and monitor implementation were verified inside the BIN.
+See FIRMWARE-DUAL-MONITOR.md for device setup. Browser/UI checks passed;
+no physical WiCAN or vehicle validation has been performed.
