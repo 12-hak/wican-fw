@@ -1,3 +1,5 @@
+Historical test build: dual-bus UI is removed in blewake.1. See FIRMWARE-BLE-WAKE.md for the current experiment.
+
 WiCAN Pro dual-bus monitor firmware test
 Version: 6.0.0-beta.7-dualbus.1
 

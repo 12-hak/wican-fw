@@ -62,3 +62,12 @@ Build 41428541495 passed; downloaded BIN SHA256 af110f2035f835ed1c4d5b5a77891812
 The new navigation and monitor implementation were verified inside the BIN.
 See FIRMWARE-DUAL-MONITOR.md for device setup. Browser/UI checks passed;
 no physical WiCAN or vehicle validation has been performed.
+
+## BLE standby wake test
+
+Version 6.0.0-beta.7-blewake.1, source 613eea5bf8c65d94e531bd3a2dae8069dddecf99.
+Build 41634670896 passed. BIN SHA256 e9413a51a063a2fca829dfad193748a2b838d6deb797f2ed73c43d9fcd047753.
+Original CAN Monitor restored; bounded BLE wake experiment under Power Saving.
+See FIRMWARE-BLE-WAKE.md. Software tests and artifact checks passed; live device
+was inspected read-only and has not been updated. Hardware BLE wake and
+standby current remain unverified. No vehicle unlock request was added.
