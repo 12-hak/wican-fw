@@ -184,119 +184,6 @@ function dbcDecode(sig,bytes){
 }
 const fmtVal=v=>{if(!Number.isFinite(v))return"?";const a=Math.abs(v);return a>=1000?v.toFixed(0):a>=10?v.toFixed(1):v.toFixed(2).replace(/\.?0+$/,"");};
 
-/* DUAL_BUS_TEST_BEGIN: receive-only browser test; two independent sockets. */
-function buildDualBusTest(){
-  let alive=true;
-  const encoder=new TextEncoder(),decoder=new TextDecoder();
-  const url=path=>((typeof API!=="undefined"&&API)?API.replace(/^http/,"ws"):location.origin.replace(/^http/,"ws"))+path;
-  const cards=[];
-  const css=h("style",{},`.dual-bus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;overflow:auto;height:100%;align-content:start}.dual-bus-card{border:1px solid var(--pbd2);border-radius:8px;padding:16px;min-width:0;background:var(--pcard)}.dual-bus-card h3{margin:0 0 6px}.dual-bus-card button:disabled{opacity:.45;cursor:default}.dual-bus-card .db-status{min-height:42px;margin:12px 0;overflow-wrap:anywhere}.dual-bus-card table{width:100%;border-collapse:collapse;font:12px var(--mono)}.dual-bus-card th,.dual-bus-card td{padding:7px 5px;text-align:left;border-bottom:1px solid var(--pbd2)}.dual-bus-card .db-scroll{overflow:auto;max-height:340px}.dual-bus-card pre{white-space:pre-wrap;max-height:120px;overflow:auto;font-size:11px}.dual-bus-note{grid-column:1/-1;font-size:12px;color:var(--pdim)}@media(max-width:760px){.dual-bus-grid{grid-template-columns:1fr}}`);
-  const root=h("div",{class:"pmv dual-bus-grid"},css);
-  function parseNative(line){
-    const m=/^([tTrR])([0-9a-fA-F]+)$/.exec(line);if(!m)return null;
-    const ext=m[1]===m[1].toUpperCase(),rtr=m[1].toLowerCase()==="r",n=ext?8:3,t=m[2];
-    if(t.length<n+1)return null;const id=t.slice(0,n).toUpperCase(),dlc=parseInt(t[n],16),payload=t.slice(n+1),len=rtr?0:dlc*2;
-    if(dlc>8||parseInt(id,16)>(ext?0x1fffffff:0x7ff)||![len,len+4].includes(payload.length))return null;
-    return{id,dlc,data:rtr?"RTR":(payload.slice(0,len).match(/../g)||[]).join(" ").toUpperCase(),ext,rtr};
-  }
-  function parseChip(line){
-    const a=line.trim().split(/\s+/),id=a.shift();if(!/^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{8})$/.test(id||""))return null;
-    if(a.length>8||a.some(x=>!/^[0-9a-fA-F]{2}$/.test(x))||parseInt(id,16)>(id.length===8?0x1fffffff:0x7ff))return null;
-    return{id:id.toUpperCase(),dlc:a.length,data:a.join(" ").toUpperCase(),ext:id.length===8,rtr:false};
-  }
-  function card(chip){
-    const s={ws:null,active:false,busy:false,token:0,buffer:"",pending:null,total:0,rows:new Map(),dirty:true,times:[],last:null,log:[],chip};cards.push(s);
-    const start=h("button",{class:"pm-btn pri",type:"button"},"Start monitor"),stop=h("button",{class:"pm-btn",type:"button",disabled:true},"Stop monitor"),clear=h("button",{class:"pm-btn",type:"button"},"Clear");
-    const status=h("div",{class:"db-status",role:"status"},"Stopped — no capture started"),counts=h("div",{},"Frames: 0 · IDs: 0 · 0 frames/s"),last=h("div",{style:"font-size:12px;margin:8px 0"},"Last frame: —"),rows=h("tbody",{}),log=h("pre",{});
-    const table=h("table",{},h("thead",{},h("tr",{},...['ID (hex)','DLC','Latest data','Count'].map(t=>h("th",{},t)))),rows);
-    const el=h("section",{class:"dual-bus-card"},h("h3",{},chip?"HS-CAN2 · pins 3/11":"HS-CAN1 · pins 6/14"),h("div",{style:"font-size:12px;color:var(--pdim)"},chip?"OBD interpreter · 500 kbit/s · silent monitor":"ESP32 native CAN · 500 kbit/s · listen-only"),h("div",{style:"display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"},start,stop,clear),status,counts,last,h("div",{class:"db-scroll"},table),chip?h("details",{},h("summary",{},"Chip setup commands"),log):null);
-    root.append(el);
-    function buttons(){start.disabled=s.busy||!!s.ws;stop.disabled=!s.busy&&!s.ws;}
-    function note(text){status.textContent=text;}
-    function addLog(text){s.log.push(text);if(s.log.length>30)s.log.shift();log.textContent=s.log.join("\n");}
-    function cancel(message="Stopped"){
-      s.token++;s.busy=false;s.active=false;
-      if(s.pending){const p=s.pending;s.pending=null;clearTimeout(p.timer);p.reject(new Error(message));}
-      const ws=s.ws;s.ws=null;
-      if(ws){try{if(chip&&ws.readyState===1)ws.send(encoder.encode(" "));ws.close();}catch(e){}}
-      note(message);buttons();
-    }
-    s.cancel=cancel;
-    function frame(f){
-      const now=performance.now();s.total++;s.last=now;s.times.push(now);s.dirty=true;
-      const key=f.id+(f.ext?"E":"S")+(f.rtr?"R":"D"),old=s.rows.get(key);
-      if(old||s.rows.size<256)s.rows.set(key,{...f,count:(old?old.count:0)+1});
-    }
-    function receive(text){
-      s.buffer+=text;
-      if(s.pending){const i=s.buffer.indexOf(">");if(i<0){if(s.buffer.length>8192)cancel("Error: chip setup response exceeded 8 KB");return;}
-        const reply=s.buffer.slice(0,i);s.buffer=s.buffer.slice(i+1);const p=s.pending;s.pending=null;clearTimeout(p.timer);
-        const lines=reply.split(/[\r\n]+/).map(x=>x.trim()).filter(x=>x&&x!==p.cmd);
-        addLog(p.cmd+" → "+lines.join(" / "));
-        if(!lines.includes("OK")||lines.some(x=>["?","ERROR","CAN ERROR"].includes(x)))p.reject(new Error(p.cmd+" rejected: "+lines.join(" / ")));else p.resolve();
-        return;
-      }
-      let i;while((i=s.buffer.search(/[\r\n]/))>=0){const line=s.buffer.slice(0,i).trim();s.buffer=s.buffer.slice(i+1);if(!line)continue;
-        const f=(chip?parseChip:parseNative)(line);if(f&&s.active)frame(f);
-        else if(chip&&s.active&&line!=="ATMA"){cancel("Error: unexpected chip output: "+line);return;}}
-      if(s.buffer.length>8192)cancel("Error: receive buffer exceeded 8 KB");
-      if(chip&&s.active&&s.buffer.includes(">"))cancel("Chip returned to prompt; monitor stopped");
-    }
-    function command(cmd){return new Promise((resolve,reject)=>{
-      s.buffer="";const timer=setTimeout(()=>{if(s.pending&&s.pending.cmd===cmd){s.pending=null;reject(new Error("No prompt after "+cmd));}},4000);
-      s.pending={cmd,resolve,reject,timer};try{s.ws.send(encoder.encode(cmd+"\r"));}catch(e){clearTimeout(timer);s.pending=null;reject(e);}
-    });}
-    start.onclick=async()=>{
-      if(s.busy||s.ws)return;s.busy=true;const token=++s.token;buttons();note("Checking interface…");
-      try{
-        if(chip){
-          const [info,apid,run]=await Promise.all([api("/api/obd_chip"),api("/api/settings/autopid"),api("/api/autopid")]);
-          if(token!==s.token||!alive)return;
-          if(apid.enabled!==false||apid.pending_reboot||!run.stats||run.stats.running!==false)throw new Error("Disable AutoPID in Settings and apply/restart before this test");
-          if(!info.ready)throw new Error("OBD chip is not ready; inspect System diagnostics");
-        }else{
-          const info=await api("/api/can");if(token!==s.token||!alive)return;
-          if(!info.running||!info.silent||info.baud_kbps!==500)throw new Error("Enable native CAN with silent=true and baud=500 in Settings; apply/restart first");
-        }
-        if(token!==s.token||!alive)return;
-        s.buffer="";s.log=[];log.textContent="";
-        const ws=new WebSocket(url(chip?"/ws/obd":"/ws/can"));s.ws=ws;ws.binaryType="arraybuffer";
-        const openTimer=setTimeout(()=>{if(s.ws===ws&&!s.active)cancel("Error: WebSocket connection timed out");},8000);
-        ws.onmessage=e=>{if(s.ws===ws)receive(typeof e.data==="string"?e.data:decoder.decode(e.data));};
-        ws.onerror=()=>{if(s.ws===ws)cancel("Error: WebSocket failed; check Settings → Connections");};
-        ws.onclose=()=>{clearTimeout(openTimer);if(s.ws===ws)cancel("Disconnected — monitor is not receiving");};
-        ws.onopen=async()=>{
-          clearTimeout(openTimer);if(s.ws!==ws)return;
-          try{
-            if(chip){
-              note("Setting up pins 3/11…");
-              for(const cmd of ["ATE0","ATM0","VTP251","VT PBR 500000","ATCSM1","ATCFC0","ATH1","ATS1","ATL0","ATD0","ATCAF0"]){
-                if(s.ws!==ws||!alive)return;await command(cmd);
-              }
-              if(s.ws!==ws||!alive)return;s.active=true;ws.send(encoder.encode("ATMA\r"));addLog("ATMA → monitoring");
-            }else s.active=true;
-            s.busy=false;buttons();note("Listening — waiting for frames");
-          }catch(e){if(s.ws===ws)cancel("Error: "+e.message);}
-        };
-      }catch(e){if(token===s.token){s.busy=false;buttons();note("Error: "+e.message);}}
-    };
-    stop.onclick=()=>cancel("Stopped — captured frames retained");
-    clear.onclick=()=>{s.total=0;s.rows.clear();s.times=[];s.last=null;s.dirty=true;};
-    s.paint=()=>{
-      const now=performance.now();s.times=s.times.filter(t=>t>now-1000);
-      counts.textContent="Frames: "+s.total+" · IDs shown: "+s.rows.size+" · "+s.times.length+" frames/s";
-      last.textContent=s.last===null?"Last frame: —":"Last frame: "+((now-s.last)/1000).toFixed(1)+" s ago";
-      if(s.active)note(s.last===null?"Listening — waiting for frames":"Receiving frames"+(now-s.last>2000?" — bus currently quiet":""));
-      if(!s.dirty)return;s.dirty=false;rows.replaceChildren(...[...s.rows.values()].sort((a,b)=>parseInt(a.id,16)-parseInt(b.id,16)).map(f=>h("tr",{},h("td",{},f.id+(f.ext?" EXT":"")),h("td",{},f.dlc),h("td",{},f.data||"—"),h("td",{},f.count))));
-    };
-  }
-  card(false);card(true);
-  root.append(h("div",{class:"dual-bus-note"},"Start either monitor, then both. Each counts frames independently; only the latest payload per ID is shown (up to 256 IDs). No frame transmission controls are provided here. Disable AutoPID, scripts and diagnostic jobs, and close other OBD clients. Stop the 3/11 monitor before opening an ELM terminal. Leaving this page closes both views and sends the chip's monitor-stop byte when connected. If Wi-Fi drops, the chip may remain in passive monitoring until stopped or restarted."));
-  const timer=setInterval(()=>{if(alive)cards.forEach(c=>c.paint());},250);
-  return{el:root,dispose:()=>{alive=false;clearInterval(timer);cards.forEach(c=>c.cancel("Stopped"));},parseNative,parseChip};
-}
-/* DUAL_BUS_TEST_END */
-
 PAGES.__monitor=async(view,sub)=>{
   const prefs=loadPrefs();
   /* opens DISCONNECTED (Ali, 2026-09-07: "it should be disconnected by default"):
@@ -337,8 +224,6 @@ PAGES.__monitor=async(view,sub)=>{
   const statusBar=h("div",{class:"pm-status"},h("span",{},sbDot,sbConn),sbBus,h("span",{},"load",h("span",{class:"pm-load"},sbLoadBar),sbLoad),sbRx,sbFrames,sbErr,sbTec);
   app.append(body,statusBar);
   function paintStatus(){
-    const dual=curTab()==="dual";
-    connBtn.style.display=dual?"none":"";connChip.style.display=dual?"none":"";statusBar.style.display=dual?"none":"";
     const c=S.can,on=S.connected;
     sbDot.classList.toggle("on",on);sbConn.textContent=on?(S.paused?"paused":"connected"):"offline";
     sbBus.textContent=c&&c.enabled?"CAN "+canRate(c)+canNote(c):"CAN off";
@@ -798,9 +683,8 @@ PAGES.__monitor=async(view,sub)=>{
   window.addEventListener("keydown",onKey);
 
   /* ================= go ================= */
-  const dualTest=buildDualBusTest();
   PAGES.__monitorState=S; /* for the preview probes */
-  tabbedPage(body,"monitor",[{id:"monitor",el:paneMon},{id:"dual",el:dualTest.el},{id:"trace",el:paneTr},{id:"settings",el:paneSet}],sub);
+  tabbedPage(body,"monitor",[{id:"monitor",el:paneMon},{id:"trace",el:paneTr},{id:"settings",el:paneSet}],sub);
   paintTx();paintRx();paintTrace();paintStatus();paintDevice();paintDbcCard();
   loadWiring();loadSigs();
   /* no connect() here: the page starts offline until Connect… */
@@ -816,7 +700,6 @@ PAGES.__monitor=async(view,sub)=>{
     paintStatus();},2000);
   const devT=setInterval(async()=>{if(!S.alive)return;if(curTab()!=="settings")return;const st=await tryGet("/api/status");if(st){S.status=st;paintDevice();}},5000);
   return()=>{
-    dualTest.dispose();
     S.alive=false;clearInterval(fastT);clearInterval(cycT);clearInterval(slowT);clearInterval(canT);clearInterval(devT);clearTimeout(S.reT);
     window.removeEventListener("keydown",onKey);window.removeEventListener("resize",fit);closeCtx();closeOv();
     const w=S.ws;S.ws=null;if(w){try{w.close();}catch(e){}}

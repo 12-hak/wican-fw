@@ -1,1 +1,1 @@
-6.0.0-beta.7-dualbus.1
+6.0.0-beta.7-blewake.1

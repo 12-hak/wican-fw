@@ -39,6 +39,7 @@
 #include "ip4_routes.h"
 #include "lwip_guard.h"
 #include "main_sleep.h"
+#include "main_ble_wake.h"
 #include "battery_monitor.h"
 #include "ble_http.h"
 #include "ble_j2534.h"
@@ -296,6 +297,7 @@ void app_main(void)
     main_boot_init("imu_manager_register_http", imu_manager_register_http);
     main_boot_init("cert_manager_register_http", cert_manager_register_http);
     main_boot_init("vpn_manager_register_http", vpn_manager_register_http);
+    main_boot_init("main_ble_wake_register_http", main_ble_wake_register_http);
     main_boot_init("sleep_manager_register_http",
               sleep_manager_register_http);
     main_boot_init("usb_host_manager_register_http",

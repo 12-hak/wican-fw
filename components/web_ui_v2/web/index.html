@@ -1781,7 +1781,7 @@ const NAV=[
   {r:"power",t:"Power Saving",i:"battery"},
   {r:"logger",t:"Logger",i:"harddrive"},
   {r:"dashboard",t:"Dashboard",i:"gauge"},
-  {r:"monitor",t:"CAN Monitor",i:"monitor",sub:[{id:"monitor",t:"Monitor"},{id:"dual",t:"Dual bus test"},{id:"trace",t:"Trace"},{id:"settings",t:"Settings"}]},
+  {r:"monitor",t:"CAN Monitor",i:"monitor",sub:[{id:"monitor",t:"Monitor"},{id:"trace",t:"Trace"},{id:"settings",t:"Settings"}]},
   {r:"terminal",t:"Terminal",i:"terminal"},
   {r:"advanced",t:"Advanced",i:"sliders"},
   {r:"system",t:"System",i:"cpu",sub:[{id:"maintenance",t:"Maintenance"},{id:"certificates",t:"Certificates"},{id:"firmware",t:"Firmware update"}]},
@@ -3300,9 +3300,34 @@ PAGES.automate=async(view,sub)=>{
 };
 
 /* ---- Power Saving ---- */
+/* BLE_WAKE_UI_BEGIN */
+function bleWakeTestCard(){
+  let alive=true,busy=false,last=null;
+  const state=h("div",{class:"mono",style:"margin:8px 0"},"Loading test status…"),detail=h("div",{class:"note"}),result=h("div",{class:"note"});
+  const enable=h("button",{class:"btn sm",type:"button"},"Enable BLE (stage settings)"),pair=h("button",{class:"btn sm",type:"button"},"Open pairing window"),start=h("button",{class:"btn pri",type:"button"},"Start 3-minute BLE standby");
+  const paint=s=>{
+    last=s;state.textContent="Last test: "+s.result+" · trials: "+s.trials+" · duration: "+(s.elapsed_ms/1000).toFixed(1)+" s";
+    detail.textContent="BLE "+(s.ble_enabled?"enabled":"disabled")+" · phone "+(s.connected?(s.secured?"connected and secured":"connected, not secured"):"disconnected")+" · pairing "+(s.pairing_enabled?"open":"closed");
+    result.textContent=s.result==="none"?"No standby test has run yet.":"Last standby power configuration: modem sleep "+(s.modem_sleep_configured?"accepted":"not accepted")+", automatic light sleep "+(s.automatic_light_sleep_configured?"accepted":"not accepted")+". Current consumption is unmeasured.";
+    start.disabled=busy||s.active||!s.ble_enabled||s.connected;pair.disabled=busy||s.active||!s.ble_enabled;enable.disabled=busy||s.active;
+  };
+  const refresh=async()=>{const s=await tryGet("/api/ble_wake_test");if(!alive)return;if(s)paint(s);else if(last&&last.active)state.textContent="WiCAN offline during standby — waiting for authenticated BLE wake or 3-minute recovery";};
+  const act=async path=>{busy=true;if(last)paint(last);try{const s=await api(path,{method:"POST"});if(alive)paint(s);}catch(e){if(alive)toast(e.message,"err");}finally{busy=false;if(alive&&last)paint(last);}};
+  enable.onclick=async()=>{try{const cfg=await api("/api/settings/ble_manager");delete cfg.pending_reboot;delete cfg.degraded;Object.assign(cfg,{enabled:true,bonding:true,sc_only:true,ble_ram_profile:"lean",advertising:"legacy",phy:"1m"});store.stage("ble_manager",cfg);toast("BLE settings staged. Submit Changes and restart before pairing.","ok");}catch(e){toast(e.message,"err");}};
+  pair.onclick=()=>act("/api/ble_wake_test/pairing");start.onclick=()=>act("/api/ble_wake_test/start");
+  const el=cardTools("BLE wake test","bluetooth",[],state,detail,result,
+    h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;margin:12px 0"},enable,pair,start),
+    note("","First enable BLE and restart. Pair/bond your Android phone using a BLE app, then disconnect it. Start standby here, reconnect the bonded phone and access an encrypted characteristic if needed. New pairing is blocked during standby. WiFi and CAN stop; a secured reconnect or the 3-minute timer restarts normal operation. Return here to read the retained result."),
+    note("warn","Test mode only: no vehicle unlock or other CAN command is sent. BLE standby is different from the normal radio-off sleep. A supply below 12.0 V or an ADC failure ends the test into normal sleep. Standby current and automatic phone proximity are not yet validated."));
+  refresh();const timer=setInterval(refresh,2000);
+  return{el,dispose:()=>{alive=false;clearInterval(timer);}};
+}
+/* BLE_WAKE_UI_END */
+
 PAGES.power=async(view)=>{
   const p=page(view,null,"Power Saving","Sleep behaviour to protect the vehicle battery.");
   const wrap=h("div",{});p.append(wrap);
+  const bleTest=bleWakeTestCard();wrap.append(bleTest.el);
   try{const rows=await settingsForm("sleep_manager",null,
       {advancedExcept:["enabled","sleep_mv","wake_mv","wake_delay_ms","sleep_delay_min","periodic_wakeup","wakeup_interval_min"],
        /* progressive disclosure: nothing but the switch while sleep is off;
@@ -3328,7 +3353,7 @@ PAGES.power=async(view)=>{
       note("","Keep awake: while a countdown runs, the bar at the top offers ten more minutes, and the page asks one minute before the entry. A press moves the sleep delay and the critical floor out by ten minutes, three times per start; nothing is saved and a restart drops it."),
       note("warn","Disabling sleep continuously drains the vehicle battery when the engine is off. Only disable for testing.")));
   }catch(e){wrap.append(banner("crit","alert",e.message));}
-  return null;
+  return()=>bleTest.dispose();
 };
 
 /* ---- Logger ---- */

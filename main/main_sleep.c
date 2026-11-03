@@ -30,9 +30,12 @@
 #include "fw_update.h"
 
 #include "main_sleep.h"
+#include "main_ble_wake.h"
+#include "interface_manager.h"
 
 static void on_prepare_sleep(void)
 {
+    (void)interface_manager_stop();
     (void)fw_update_stop(); /* a download in flight is dropped first */
     (void)autopid_stop();
     (void)j1939_stop(); /* gives its bus subscription back first */
@@ -53,7 +56,15 @@ static void on_prepare_sleep(void)
     (void)usb_host_manager_stop(); /* waits for its teardown (bounded) */
     (void)wifi_manager_stop();
     (void)ble_http_stop();
-    (void)ble_manager_stop();
+    if (!sleep_manager_ble_test_active())
+    {
+        (void)ble_manager_stop();
+        main_ble_wake_normal_power();
+    }
+    else
+    {
+        main_ble_wake_prepare();
+    }
     (void)external_storage_stop();
     (void)led_manager_stop(); /* LED dark through the naps (legacy
                                  led_set_level(0,0,0) parity) */
@@ -62,4 +73,6 @@ static void on_prepare_sleep(void)
 void main_sleep_wire(void)
 {
     (void)sleep_manager_set_prepare_cb(on_prepare_sleep);
+    sleep_manager_set_ble_ready_cb(main_ble_wake_secured);
+    main_ble_wake_normal_power();
 }

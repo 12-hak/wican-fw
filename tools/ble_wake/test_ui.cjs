@@ -1,0 +1,16 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');const {JSDOM}=require('jsdom');
+const source=fs.readFileSync(path.join(__dirname,'../../components/web_ui_v2/web/index.html'),'utf8');
+assert(!source.includes('id:"dual",t:"Dual bus test"'));
+const script='/* BLE_WAKE_UI_BEGIN'+source.split('/* BLE_WAKE_UI_BEGIN')[1].split('/* BLE_WAKE_UI_END */')[0]+';window.makeCard=bleWakeTestCard;';
+const dom=new JSDOM('<body></body>',{url:'http://wican/',runScripts:'outside-only'}),w=dom.window,posts=[],staged=[];
+const st={result:'none',trials:0,elapsed_ms:0,active:false,ble_enabled:false,connected:false,secured:false,pairing_enabled:false,modem_sleep_configured:false,automatic_light_sleep_configured:false};
+w.tryGet=async()=>({...st});w.api=async(p,o)=>{if(o?.method==='POST'){posts.push(p);if(p.endsWith('/start')){st.active=true;st.result='armed';}return{...st};}return{enabled:false,passkey:987654,bonding:true,sc_only:true,pending_reboot:false};};
+w.store={stage:(name,cfg)=>staged.push([name,cfg])};w.toast=()=>{};
+w.eval(`function h(tag,attrs,...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs||{})){if(v==null||v===false)continue;if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v);}for(const c of kids.flat(9)){if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));}return e;}function cardTools(title,icon,tools,...kids){return h('section',{},h('h3',{},title),...kids);}function note(kind,text){return h('p',{},text);}`);
+w.eval(script);const card=w.makeCard();w.document.body.append(card.el);
+const tick=()=>new Promise(r=>setTimeout(r,10));
+(async()=>{await tick();const buttons=card.el.querySelectorAll('button');assert.equal(posts.length,0);assert(buttons[2].disabled);
+buttons[0].click();await tick();assert.equal(staged.length,1);assert.equal(staged[0][1].enabled,true);assert.equal(staged[0][1].passkey,987654);assert.equal(posts.length,0);
+st.ble_enabled=true;await new Promise(r=>setTimeout(r,2050));assert(!buttons[2].disabled);
+buttons[1].click();await tick();assert.equal(posts[0],'/api/ble_wake_test/pairing');
+buttons[2].click();await tick();assert.equal(posts[1],'/api/ble_wake_test/start');assert(buttons[2].disabled);assert(card.el.textContent.includes('armed'));card.dispose();dom.window.close();console.log('PASS: no implicit arm, BLE staging preserves configuration, pairing/start endpoints, active guard, dual tab removed');})().catch(e=>{console.error(e);process.exit(1)});
